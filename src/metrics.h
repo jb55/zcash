@@ -28,6 +28,9 @@ extern AtomicCounter ehSolverRuns;
 extern AtomicCounter solutionTargetChecks;
 extern AtomicCounter minedBlocks;
 
+void MarkStartTime();
+double GetLocalSolPS();
+
 void ConnectMetricsScreen();
 void ThreadShowMetricsScreen();
 

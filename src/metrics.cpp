@@ -15,6 +15,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+boost::synchronized_value<int64_t> nNodeStartTime;
 AtomicCounter transactionsValidated;
 AtomicCounter ehSolverRuns;
 AtomicCounter solutionTargetChecks;
@@ -23,6 +24,26 @@ AtomicCounter minedBlocks;
 boost::synchronized_value<std::list<std::string>> messageBox;
 boost::synchronized_value<std::string> initMessage;
 bool loaded = false;
+
+void MarkStartTime()
+{
+    *nNodeStartTime = GetTime();
+}
+
+int64_t GetUptime()
+{
+    return GetTime() - *nNodeStartTime;
+}
+
+double GetLocalSolPS_INTERNAL(int64_t uptime)
+{
+    return uptime > 0 ? (double)solutionTargetChecks.get() / uptime : 0;
+}
+
+double GetLocalSolPS()
+{
+    return GetLocalSolPS_INTERNAL(GetUptime());
+}
 
 static bool metrics_ThreadSafeMessageBox(const std::string& message,
                                       const std::string& caption,
@@ -83,13 +104,13 @@ void printMiningStatus(bool mining)
     std::cout << std::endl;
 }
 
-int printMetrics(size_t cols, int64_t nStart, bool mining)
+int printMetrics(size_t cols, bool mining)
 {
     // Number of lines that are always displayed
     int lines = 3;
 
     // Calculate uptime
-    int64_t uptime = GetTime() - nStart;
+    int64_t uptime = GetUptime();
     int days = uptime / (24 * 60 * 60);
     int hours = (uptime - (days * 24 * 60 * 60)) / (60 * 60);
     int minutes = (uptime - (((days * 24) + hours) * 60 * 60)) / 60;
@@ -113,7 +134,7 @@ int printMetrics(size_t cols, int64_t nStart, bool mining)
     std::cout << "- " << strprintf(_("You have validated %d transactions!"), transactionsValidated.get()) << std::endl;
 
     if (mining) {
-        double solps = uptime > 0 ? (double)solutionTargetChecks.get() / uptime : 0;
+        double solps = GetLocalSolPS_INTERNAL(uptime);
         std::string strSolps = strprintf("%.4f Sol/s", solps);
         std::cout << "- " << strprintf(_("You have contributed %s on average to the network solution rate."), strSolps) << std::endl;
         std::cout << "- " << strprintf(_("You have completed %d Equihash solver runs."), ehSolverRuns.get()) << std::endl;
@@ -187,9 +208,6 @@ void ThreadShowMetricsScreen()
     bool mining = GetBoolArg("-gen", false);
     printMiningStatus(mining);
 
-    // Count uptime
-    int64_t nStart = GetTime();
-
     while (true) {
         // Number of lines that are always displayed
         int lines = 1;
@@ -207,7 +225,7 @@ void ThreadShowMetricsScreen()
         // Erase below current position
         std::cout << "\e[J";
 
-        lines += printMetrics(cols, nStart, mining);
+        lines += printMetrics(cols, mining);
         lines += printMessageBox(cols);
         lines += printInitMessage();
 
